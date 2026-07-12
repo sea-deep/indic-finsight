@@ -167,6 +167,8 @@ AGENT_PROMPTS = {
 You have ONE tool: search_filings(query)
 Your job: search the company filings database and extract relevant information.
 
+CRITICAL: When extracting data for a chart or graph, search ONLY for the underlying entities or metrics (e.g., "Reliance segment revenues"). DO NOT include words like "chart", "graph", or "plot" in your search query!
+
 Format your response EXACTLY as:
 Thought: [your reasoning]
 Action: search_filings
@@ -316,7 +318,7 @@ Synthesize the reports below into a comprehensive, professional response.
 CRITICAL INSTRUCTIONS:
 1. Format your entire response in strict Markdown (use **bold** for emphasis, lists for points).
 2. Use clear spacing and newlines between paragraphs to make it highly readable.
-3. If data is missing from the reports, suggest 2 or 3 logical follow-up actions the user could take to find it.
+3. If data is missing from the reports, suggest 2 or 3 follow-up QUERIES the user could ask YOU to search for instead. DO NOT suggest external actions like "contact the company" or "visit a website". The options must be actual queries the user can click to ask you.
 4. You MUST output your suggested follow-ups at the very end of your response using exactly this format:
 [OPTIONS: Option 1 | Option 2 | Option 3]
 
@@ -334,7 +336,7 @@ Agent Reports:
     
     # Extract OPTIONS if present
     options = []
-    options_match = re.search(r'\\[OPTIONS:\\s*(.*?)\\]', final_answer_raw, re.IGNORECASE)
+    options_match = re.search(r'\\[OPTIONS:\\s*(.*?)\\]', final_answer_raw, re.IGNORECASE | re.DOTALL)
     if options_match:
         options_text = options_match.group(1)
         # foolproof extraction: split by "|"
@@ -342,7 +344,7 @@ Agent Reports:
         for p in parts:
             clean = p.strip('"\\'').strip()
             if clean: options.append(clean)
-        final_answer = re.sub(r'\\[OPTIONS:.*?\\]', '', final_answer_raw, flags=re.IGNORECASE).strip()
+        final_answer = re.sub(r'\\[OPTIONS:.*?\\]', '', final_answer_raw, flags=re.IGNORECASE | re.DOTALL).strip()
     else:
         final_answer = final_answer_raw
         
