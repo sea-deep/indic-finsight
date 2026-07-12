@@ -4,6 +4,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Card, CardContent } from "./components/ui/card";
 import clsx from "clsx";
+import ReactMarkdown from 'react-markdown';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const API_URL = "https://indic-finsight-seaadeep-998877.loca.lt";
@@ -272,8 +273,8 @@ function AgentApp() {
                           )}
 
                           {/* Answer */}
-                          <div className="bg-white/[0.03] border border-white/[0.06] px-5 py-4 rounded-lg text-sm leading-relaxed whitespace-pre-wrap">
-                            {finalAnswer || msg.content}
+                          <div className="bg-white/[0.03] border border-white/[0.06] px-5 py-4 rounded-lg text-sm leading-relaxed prose prose-invert prose-p:my-2 prose-ul:my-2 prose-li:my-0 max-w-none">
+                            <ReactMarkdown>{finalAnswer || msg.content}</ReactMarkdown>
                           </div>
 
                           {/* Chart */}
