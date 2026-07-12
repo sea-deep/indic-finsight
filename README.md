@@ -31,6 +31,35 @@
 
 The backend is intended to run as a Kaggle Notebook (to leverage the T4 GPU). It uses `localtunnel` to expose a FastAPI endpoint to the public internet, which the frontend consumes.
 
-1. Generate the notebook: `python agent_backend/build_notebook.py`
-2. Push to Kaggle: `kaggle kernels push -p agent_backend/kaggle_submission/ --accelerator NvidiaTeslaT4`
-3. Run the frontend: `cd frontend && npm run dev`
+### 1. Backend (Kaggle)
+1. Generate the notebook locally: 
+   ```bash
+   python agent_backend/build_notebook.py
+   ```
+2. Push the notebook to Kaggle: 
+   ```bash
+   kaggle kernels push -p agent_backend/kaggle_submission/ --accelerator NvidiaTeslaT4
+   ```
+3. Wait for the Kaggle session to boot (can take 2-3 minutes). The API will automatically host itself on Localtunnel (`https://indic-finsight-seaadeep-998877.loca.lt`).
+
+### 2. Frontend (Local)
+Run the React application:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open `http://localhost:5173` in your browser.
+
+## API Testing
+
+You can test the API directly using `cURL`. Make sure you pass the `Bypass-Tunnel-Reminder` header for Localtunnel.
+
+```bash
+curl -X POST https://indic-finsight-seaadeep-998877.loca.lt/chat \
+  -H "Content-Type: application/json" \
+  -H "Bypass-Tunnel-Reminder: true" \
+  -d '{"text": "Show a chart of Reliance segment revenues", "history": []}'
+```
+
+Expected output includes the multi-agent reasoning trace (Thought, Action, Result) and a synthesized `Final Answer`.
