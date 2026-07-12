@@ -77,7 +77,7 @@ function AgentApp() {
       } else {
         if (currentKey === "thought") currentStep.thought += " " + line.trim();
         else if (currentKey === "observation") currentStep.observation += " " + line.trim();
-        else if (currentKey === "final") finalAnswer += " " + line.trim();
+        else if (currentKey === "final") finalAnswer += "\\n" + line;
       }
     }
     if (currentStep.thought || currentStep.action) steps.push({ ...currentStep });
@@ -272,7 +272,7 @@ function AgentApp() {
                           )}
 
                           {/* Answer */}
-                          <div className="bg-white/[0.03] border border-white/[0.06] px-5 py-4 rounded-lg text-sm leading-relaxed">
+                          <div className="bg-white/[0.03] border border-white/[0.06] px-5 py-4 rounded-lg text-sm leading-relaxed whitespace-pre-wrap">
                             {finalAnswer || msg.content}
                           </div>
 

@@ -122,7 +122,7 @@ def get_live_stock_price(ticker: str) -> str:
 
 def search_web(query: str) -> str:
     try:
-        results = DDGS().text(query, max_results=3)
+        results = DDGS().news(query, max_results=3)
         if not results:
             return "No web results found."
         return " ".join([f"[{r['title']}] {r['body']}" for r in results])
@@ -219,7 +219,7 @@ Thought: [confirm chart created]
 Result: [description of the chart]''',
 }
 
-def run_sub_agent(agent_type, user_query, context="", max_steps=6):
+def run_sub_agent(agent_type, user_query, context="", max_steps=6, previous_history=None):
     agent_prompt = AGENT_PROMPTS[agent_type]
     tool_map = {
         "filings": {"search_filings": search_filings},
@@ -230,7 +230,16 @@ def run_sub_agent(agent_type, user_query, context="", max_steps=6):
     tools = tool_map[agent_type]
     
     system = f"{agent_prompt}\\n\\nContext from other agents: {context}" if context else agent_prompt
-    chat = [{"role": "user", "content": f"{system}\\n\\nUser Query: {user_query}"}]
+    chat = [{"role": "user", "content": system}]
+    
+    if previous_history:
+        # Prepend the conversation history (excluding the current query)
+        # Assuming previous_history contains standard role/content pairs
+        for msg in previous_history[:-1]:
+            # Keep it simple, just add them to the context
+            chat.append({"role": msg["role"], "content": str(msg.get("content", ""))})
+    
+    chat.append({"role": "user", "content": f"User Query: {user_query}"})
     
     full_trace = []
     
@@ -293,7 +302,7 @@ def run_orchestrator(user_query, previous_history=None):
     
     for intent in intents:
         print(f"\\n--- Dispatching to {intent.upper()} agent ---")
-        result = run_sub_agent(intent, user_query, context=context)
+        result = run_sub_agent(intent, user_query, context=context, previous_history=previous_history)
         agent_results[intent] = result["result"]
         all_traces.extend(result["trace"])
         context += f" {result['result']}"
@@ -303,9 +312,12 @@ def run_orchestrator(user_query, previous_history=None):
     synthesis_prompt = f'''You are a highly intelligent financial orchestrator.
 Synthesize the reports below into a comprehensive, professional response.
 
-If data is missing from the reports, suggest 2 or 3 logical follow-up actions the user could take to find it.
-You MUST output your suggested follow-ups at the very end of your response using exactly this JSON format:
-[OPTIONS: "Option 1 text", "Option 2 text"]
+CRITICAL INSTRUCTIONS:
+1. Format your entire response in strict Markdown (use **bold** for emphasis, lists for points).
+2. Use clear spacing and newlines between paragraphs to make it highly readable.
+3. If data is missing from the reports, suggest 2 or 3 logical follow-up actions the user could take to find it.
+4. You MUST output your suggested follow-ups at the very end of your response using exactly this format:
+[OPTIONS: Option 1 | Option 2 | Option 3]
 
 User asked: {user_query}
 
@@ -324,10 +336,10 @@ Agent Reports:
     options_match = re.search(r'\\[OPTIONS:\\s*(.*?)\\]', final_answer_raw, re.IGNORECASE)
     if options_match:
         options_text = options_match.group(1)
-        # simplistic extraction: split by ", " and clean up quotes
-        parts = [p.strip().strip('"') for p in options_text.split('", "')]
+        # foolproof extraction: split by "|"
+        parts = [p.strip() for p in options_text.split('|')]
         for p in parts:
-            clean = p.replace('"', '').strip()
+            clean = p.strip('"\\'').strip()
             if clean: options.append(clean)
         final_answer = re.sub(r'\\[OPTIONS:.*?\\]', '', final_answer_raw, flags=re.IGNORECASE).strip()
     else:
