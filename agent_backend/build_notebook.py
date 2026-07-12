@@ -348,9 +348,6 @@ Agent Reports:
     else:
         final_answer = final_answer_raw
         
-    # Replace literal newline characters the LLM might have generated
-    final_answer = final_answer.replace('\\n', '\n')
-        
     print(f"\\nFINAL ANSWER: {final_answer}")
     print(f"OPTIONS: {options}")
     
