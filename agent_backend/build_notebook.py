@@ -261,7 +261,7 @@ def run_sub_agent(agent_type, user_query, context="", max_steps=6):
         
         if action_match and input_match:
             action = action_match.group(1).strip()
-            action_input = input_match.group(1).strip()
+            action_input = input_match.group(1).strip().strip('"\\'')
             
             if action in tools:
                 observation = tools[action](action_input)
@@ -324,8 +324,11 @@ Agent Reports:
     options_match = re.search(r'\\[OPTIONS:\\s*(.*?)\\]', final_answer_raw, re.IGNORECASE)
     if options_match:
         options_text = options_match.group(1)
-        # simplistic extraction of strings in quotes
-        options = re.findall(r'"([^"]+)"', options_text)
+        # simplistic extraction: split by ", " and clean up quotes
+        parts = [p.strip().strip('"') for p in options_text.split('", "')]
+        for p in parts:
+            clean = p.replace('"', '').strip()
+            if clean: options.append(clean)
         final_answer = re.sub(r'\\[OPTIONS:.*?\\]', '', final_answer_raw, flags=re.IGNORECASE).strip()
     else:
         final_answer = final_answer_raw
