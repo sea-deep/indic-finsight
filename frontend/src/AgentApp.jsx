@@ -6,7 +6,7 @@ import { Card, CardContent } from "./components/ui/card";
 import clsx from "clsx";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
-const API_URL = "https://lovely-husky-64.loca.lt";
+const API_URL = "https://indic-finsight-seaadeep-998877.loca.lt";
 
 const AGENT_META = {
   filings: { label: "FilingsAgent", icon: Search, color: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/20" },
