@@ -85,10 +85,15 @@ function AgentApp() {
           const parts = step.input.split("|");
           if (parts.length === 2) {
             chartTitle = parts[0].trim();
-            chartData = parts[1].split(",").map(pair => {
-              const [k, v] = pair.split("=");
-              return { name: k.trim(), value: parseFloat(v) || 0 };
-            });
+            chartData = [];
+            const regex = /([^,=]+)=([\d,\.]+)/g;
+            let match;
+            while ((match = regex.exec(parts[1])) !== null) {
+              chartData.push({ 
+                name: match[1].trim(), 
+                value: parseFloat(match[2].replace(/,/g, '')) || 0 
+              });
+            }
           }
         } catch (e) { /* ignore parse errors */ }
       }
