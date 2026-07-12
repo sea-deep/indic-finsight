@@ -16,7 +16,7 @@
   "kernel_sources": [],
   "competition_sources": [],
   "model_sources": [
-    "google/gemma-2/Transformers/gemma-2-2b-it/2"
+    "google/gemma-2/Transformers/gemma-2-9b-it/2"
   ],
   "docker_image": "gcr.io/kaggle-private-byod/python@sha256:37c64f7dd9c54116ecd1bcc88817c5469b88387388fade02bfa8bf3fc647d461",
   "machine_shape": "NvidiaTeslaT4"
