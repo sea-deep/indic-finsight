@@ -78,9 +78,10 @@ for p in possible_paths:
         break
 
 if not model_path:
-    raise FileNotFoundError("Gemma 2 model not attached. Add it via Kaggle sidebar: Models → Gemma 2 → gemma-2-2b-it.")
+    raise FileNotFoundError("Gemma model not attached. Add it via Kaggle sidebar.")
 
-print(f"Loading from: {model_path}")
+loaded_model_name = [part for part in model_path.split('/') if "gemma" in part.lower()][-1]
+print(f"Loading {loaded_model_name} from: {model_path}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 model = AutoModelForCausalLM.from_pretrained(
@@ -408,7 +409,7 @@ class Query(BaseModel):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "model": "gemma-2-9b-it", "agents": ["filings", "market", "chart", "web"]}
+    return {"status": "ok", "model": loaded_model_name, "agents": ["filings", "market", "chart", "web"]}
 
 @app.post("/chat")
 def chat(query: Query):

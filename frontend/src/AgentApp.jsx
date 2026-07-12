@@ -23,6 +23,7 @@ function AgentApp() {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState("checking");
+  const [modelName, setModelName] = useState("Waiting for Kernel...");
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -33,7 +34,11 @@ function AgentApp() {
     const check = async () => {
       try {
         const r = await fetch(`${API_URL}/health`, { headers: { "Bypass-Tunnel-Reminder": "true" } });
-        if (r.ok) setStatus("online");
+        if (r.ok) {
+          setStatus("online");
+          const data = await r.json();
+          if (data.model) setModelName(data.model);
+        }
         else setStatus("offline");
       } catch {
         setStatus("offline");
@@ -195,7 +200,7 @@ function AgentApp() {
         <header className="h-12 border-b border-white/[0.06] flex items-center px-5 gap-3 bg-[#0d0d14]">
           <div className={`w-2 h-2 rounded-full ${statusColor} animate-pulse`} />
           <span className="text-xs text-slate-500">{statusText}</span>
-          <span className="text-xs text-slate-600 ml-auto font-mono">gemma-2-9b-it</span>
+          <span className="text-xs text-slate-600 ml-auto font-mono">{modelName}</span>
         </header>
 
         <div className="flex-1 overflow-y-auto p-5" ref={scrollRef}>
