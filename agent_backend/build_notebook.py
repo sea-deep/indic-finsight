@@ -230,16 +230,17 @@ def run_sub_agent(agent_type, user_query, context="", max_steps=6, previous_hist
     tools = tool_map[agent_type]
     
     system = f"{agent_prompt}\\n\\nContext from other agents: {context}" if context else agent_prompt
-    chat = [{"role": "user", "content": system}]
-    
-    if previous_history:
-        # Prepend the conversation history (excluding the current query)
-        # Assuming previous_history contains standard role/content pairs
-        for msg in previous_history[:-1]:
-            # Keep it simple, just add them to the context
-            chat.append({"role": msg["role"], "content": str(msg.get("content", ""))})
-    
-    chat.append({"role": "user", "content": f"User Query: {user_query}"})
+    if previous_history and len(previous_history) > 1:
+        chat = []
+        for i, msg in enumerate(previous_history[:-1]):
+            role = msg["role"]
+            content = str(msg.get("content", ""))
+            if i == 0 and role == "user":
+                content = f"{system}\\n\\n{content}"
+            chat.append({"role": role, "content": content})
+        chat.append({"role": "user", "content": f"User Query: {user_query}"})
+    else:
+        chat = [{"role": "user", "content": f"{system}\\n\\nUser Query: {user_query}"}]
     
     full_trace = []
     
