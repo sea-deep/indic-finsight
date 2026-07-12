@@ -122,12 +122,13 @@ def get_live_stock_price(ticker: str) -> str:
 
 def search_web(query: str) -> str:
     try:
-        results = DDGS().news(query, max_results=3)
+        # DDGS news endpoint frequently 403s, text is more stable
+        results = DDGS().text(query, max_results=3)
         if not results:
             return "No web results found."
         return " ".join([f"[{r['title']}] {r['body']}" for r in results])
     except Exception as e:
-        return f"Web search error: {e}"
+        return f"Web search currently unavailable due to rate limits. Instruct the user to try again later."
 
 def plot_chart(type_title_data: str) -> str:
     return f"[CHART:{type_title_data}]"
@@ -167,10 +168,12 @@ AGENT_PROMPTS = {
 You have ONE tool: search_filings(query)
 Your job: search the company filings database and extract relevant information.
 
-CRITICAL: When extracting data for a chart or graph, search ONLY for the underlying entities or metrics (e.g., "Reliance segment revenues"). DO NOT include words like "chart", "graph", or "plot" in your search query!
+CRITICAL INSTRUCTIONS:
+- You CANNOT use any other tools. If you need something else, answer based on your knowledge.
+- When extracting data for a chart or graph, search ONLY for the underlying entities or metrics (e.g., "Reliance segment revenues"). DO NOT include words like "chart", "graph", or "plot" in your search query!
 
 Format your response EXACTLY as:
-Thought: [your reasoning]
+Thought: I need to search the filings for this information.
 Action: search_filings
 Action Input: [your search query]
 
@@ -182,8 +185,12 @@ Result: [concise summary of findings]''',
 You have ONE tool: get_live_stock_price(ticker)
 Your job: fetch the current stock price for the requested ticker.
 
+CRITICAL INSTRUCTIONS:
+- NEVER HALLUCINATE TOOL NAMES. YOU CAN ONLY USE `get_live_stock_price`. DO NOT use `search_news` or any other tool.
+- Always append .NS to Indian stock tickers (e.g. RELIANCE.NS, TCS.NS)
+
 Format your response EXACTLY as:
-Thought: [identify the ticker]
+Thought: I need to get the stock price.
 Action: get_live_stock_price
 Action Input: [TICKER.NS format]
 
@@ -195,14 +202,18 @@ Result: [the price data]''',
 You have ONE tool: search_web(query)
 Your job: search the internet for the most recent news or financial information.
 
+CRITICAL INSTRUCTIONS:
+- NEVER HALLUCINATE TOOL NAMES. YOU CAN ONLY USE `search_web`. DO NOT use `search_news`, `search_internet`, or any other tool.
+- Keep your search queries short and concise.
+
 Format your response EXACTLY as:
-Thought: [identify what to search for]
+Thought: I should search the web for this.
 Action: search_web
 Action Input: [your search query]
 
 After receiving an Observation, provide:
-Thought: [brief analysis of web results]
-Result: [summary of recent news]''',
+Thought: [analysis of what you found]
+Result: [concise summary of findings]''',
 
     "chart": '''You are ChartAgent, a data visualization specialist.
 You have ONE tool: plot_chart(type_title_data)
@@ -396,8 +407,8 @@ class Query(BaseModel):
     history: list = []
 
 @app.get("/health")
-def health():
-    return {"status": "ok", "model": "gemma-2-2b-it", "agents": ["filings", "market", "chart", "web"]}
+def health_check():
+    return {"status": "ok", "model": "gemma-2-9b-it", "agents": ["filings", "market", "chart", "web"]}
 
 @app.post("/chat")
 def chat(query: Query):

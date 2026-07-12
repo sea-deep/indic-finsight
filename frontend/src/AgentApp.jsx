@@ -195,7 +195,7 @@ function AgentApp() {
         <header className="h-12 border-b border-white/[0.06] flex items-center px-5 gap-3 bg-[#0d0d14]">
           <div className={`w-2 h-2 rounded-full ${statusColor} animate-pulse`} />
           <span className="text-xs text-slate-500">{statusText}</span>
-          <span className="text-xs text-slate-600 ml-auto font-mono">gemma-2-2b-it</span>
+          <span className="text-xs text-slate-600 ml-auto font-mono">gemma-2-9b-it</span>
         </header>
 
         <div className="flex-1 overflow-y-auto p-5" ref={scrollRef}>
