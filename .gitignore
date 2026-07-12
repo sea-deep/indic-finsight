@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.DS_Store
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+agent_backend/kaggle_submission/.ipynb_checkpoints/

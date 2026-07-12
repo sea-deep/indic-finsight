@@ -1,0 +1,98 @@
+[
+    {
+        "source": "Bhagavad Gita",
+        "chapter": "2",
+        "verse": "47",
+        "text": "You have a right to perform your prescribed duty, but you are not entitled to the fruits of action. Never consider yourself the cause of the results of your activities, and never be attached to not doing your duty.",
+        "theme": "Duty, Attachment, Ambition",
+        "philosophy": "Vedanta (Nishkama Karma)"
+    },
+    {
+        "source": "Bhagavad Gita",
+        "chapter": "6",
+        "verse": "5",
+        "text": "Elevate yourself through the power of your mind, and not degrade yourself, for the mind can be the friend and also the enemy of the self.",
+        "theme": "Mind, Self-Control, Mental Health",
+        "philosophy": "Yoga System (Patanjali's influence)"
+    },
+    {
+        "source": "Bhagavad Gita",
+        "chapter": "2",
+        "verse": "14",
+        "text": "O son of Kunti, the nonpermanent appearance of happiness and distress, and their disappearance in due course, are like the appearance and disappearance of winter and summer seasons. They arise from sense perception, O scion of Bharata, and one must learn to tolerate them without being disturbed.",
+        "theme": "Equanimity, Grief, Hardship",
+        "philosophy": "Vedanta (Titiksha)"
+    },
+    {
+        "source": "Dhammapada",
+        "chapter": "1",
+        "verse": "1-2",
+        "text": "Mind precedes all mental states. Mind is their chief; they are all mind-wrought. If with an impure mind a person speaks or acts, suffering follows him like the wheel that follows the foot of the ox. If with a pure mind a person speaks or acts, happiness follows him like his never-departing shadow.",
+        "theme": "Mind, Action, Consequence",
+        "philosophy": "Buddhist Philosophy"
+    },
+    {
+        "source": "Dhammapada",
+        "chapter": "24",
+        "verse": "348",
+        "text": "Let go of the past, let go of the future, let go of the present, and cross over to the farther shore of existence. With mind wholly liberated, you shall come no more to birth and death.",
+        "theme": "Attachment, Freedom, Letting Go",
+        "philosophy": "Buddhist Philosophy (Nirvana)"
+    },
+    {
+        "source": "Upanishads (Isha)",
+        "chapter": "1",
+        "verse": "1",
+        "text": "All this, whatever moves in this moving world, is enveloped by God. Therefore, find your enjoyment in renunciation; do not covet what belongs to others.",
+        "theme": "Contentment, Renunciation, Greed",
+        "philosophy": "Advaita Vedanta"
+    },
+    {
+        "source": "Thirukkural",
+        "chapter": "40",
+        "verse": "391",
+        "text": "Learn flawlessly whatever you learn, and having learned it, live flawlessly according to what you have learned.",
+        "theme": "Education, Integrity, Action",
+        "philosophy": "Tamil Virtue (Aram)"
+    },
+    {
+        "source": "Thirukkural",
+        "chapter": "30",
+        "verse": "291",
+        "text": "Objective truth is the only truth; all other truths are subjective and flawed. Therefore, do not utter a word that your conscience knows to be false.",
+        "theme": "Truth, Honesty, Conscience",
+        "philosophy": "Tamil Virtue (Aram)"
+    },
+    {
+        "source": "Jain Agamas (Tattvartha Sutra)",
+        "chapter": "5",
+        "verse": "21",
+        "text": "Souls render service to one another (Parasparopagraho Jivanam).",
+        "theme": "Interconnectedness, Service, Compassion",
+        "philosophy": "Jain Philosophy (Ahimsa)"
+    },
+    {
+        "source": "Samkhya Karika",
+        "chapter": "1",
+        "verse": "1",
+        "text": "From the torment by the three kinds of suffering (arises) the inquiry into the means of terminating them; if it be said that it is useless because there exist evident means, we reply: No, because these means do not yield absolute and final relief.",
+        "theme": "Suffering, Knowledge, Liberation",
+        "philosophy": "Samkhya Philosophy (Dualism of Purusha and Prakriti)"
+    },
+    {
+        "source": "Nyaya Sutras",
+        "chapter": "1",
+        "verse": "1",
+        "text": "Supreme felicity is attained by the knowledge about the true nature of the sixteen categories: means of right knowledge, object of right knowledge, doubt, purpose, familiar instance, established tenet, members of a syllogism, confutation, ascertainment, discussion, wrangling, cavil, fallacy, quibble, futility, and occasion for rebuke.",
+        "theme": "Logic, Truth, Reasoning",
+        "philosophy": "Nyaya Philosophy (Logic and Epistemology)"
+    },
+    {
+        "source": "Yoga Sutras of Patanjali",
+        "chapter": "1",
+        "verse": "2",
+        "text": "Yoga is the cessation of the fluctuations of the mind (Yogas chitta vritti nirodhah).",
+        "theme": "Mental Discipline, Focus, Inner Peace",
+        "philosophy": "Yoga Philosophy"
+    }
+]
