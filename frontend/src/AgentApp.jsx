@@ -274,7 +274,7 @@ function AgentApp() {
 
                           {/* Answer */}
                           <div className="bg-white/[0.03] border border-white/[0.06] px-5 py-4 rounded-lg text-sm leading-relaxed prose prose-invert prose-p:my-2 prose-ul:my-2 prose-li:my-0 max-w-none">
-                            <ReactMarkdown>{(finalAnswer || msg.content).replace(/\\\\n/g, '\\n')}</ReactMarkdown>
+                            <ReactMarkdown>{(finalAnswer || msg.content).replace(/\\n/g, '\n')}</ReactMarkdown>
                           </div>
 
                           {/* Chart */}
