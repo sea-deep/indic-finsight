@@ -334,9 +334,9 @@ Agent Reports:
     output = gemma(prompt)[0]['generated_text']
     final_answer_raw = output[len(prompt):].strip()
     
-    # Extract OPTIONS if present
+    # Extract OPTIONS if present (look for bracketed text containing at least one '|')
     options = []
-    options_match = re.search(r'\\[OPTIONS:\\s*(.*?)\\]', final_answer_raw, re.IGNORECASE | re.DOTALL)
+    options_match = re.search(r'\\[([^\\]]*?\\|[^\\]]*?)\\]', final_answer_raw, re.IGNORECASE | re.DOTALL)
     if options_match:
         options_text = options_match.group(1)
         # foolproof extraction: split by "|"
@@ -344,9 +344,12 @@ Agent Reports:
         for p in parts:
             clean = p.strip('"\\'').strip()
             if clean: options.append(clean)
-        final_answer = re.sub(r'\\[OPTIONS:.*?\\]', '', final_answer_raw, flags=re.IGNORECASE | re.DOTALL).strip()
+        final_answer = re.sub(r'\\[[^\\]]*?\\|[^\\]]*?\\]', '', final_answer_raw, flags=re.IGNORECASE | re.DOTALL).strip()
     else:
         final_answer = final_answer_raw
+        
+    # Replace literal \n characters the LLM might have generated
+    final_answer = final_answer.replace('\\\\n', '\\n')
         
     print(f"\\nFINAL ANSWER: {final_answer}")
     print(f"OPTIONS: {options}")
