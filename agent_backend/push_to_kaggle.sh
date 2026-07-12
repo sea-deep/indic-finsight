@@ -12,6 +12,13 @@ if ! command -v kaggle &> /dev/null; then
     pip install kaggle
 fi
 
+echo "Running pre-push validity checks..."
+python validate_notebook.py
+if [ $? -ne 0 ]; then
+    echo "❌ Push aborted due to validation failure."
+    exit 1
+fi
+
 echo "Pushing notebook to Kaggle..."
 # We push the kaggle_submission folder, explicitly requesting a T4 GPU accelerator
 kaggle kernels push -p kaggle_submission --accelerator NvidiaTeslaT4

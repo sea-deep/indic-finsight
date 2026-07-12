@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Database, Activity, Terminal, Bot, Search, BarChart3, AlertCircle, Loader2, CheckCircle2, Globe } from "lucide-react";
+import { Send, Database, Activity, Terminal, Bot, Search, BarChart3, AlertCircle, Loader2, CheckCircle2, Globe, Calculator, FileText } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Card, CardContent } from "./components/ui/card";
@@ -14,6 +14,8 @@ const AGENT_META = {
   market:  { label: "MarketAgent",  icon: Activity, color: "text-emerald-400", bg: "bg-emerald-400/10 border-emerald-400/20" },
   chart:   { label: "ChartAgent",   icon: BarChart3, color: "text-blue-400", bg: "bg-blue-400/10 border-blue-400/20" },
   web:     { label: "WebAgent",     icon: Globe, color: "text-purple-400", bg: "bg-purple-400/10 border-purple-400/20" },
+  math:    { label: "MathAgent",    icon: Calculator, color: "text-pink-400", bg: "bg-pink-400/10 border-pink-400/20" },
+  summary: { label: "SummaryAgent", icon: FileText, color: "text-indigo-400", bg: "bg-indigo-400/10 border-indigo-400/20" },
 };
 
 const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f87171", "#c084fc", "#a78bfa"];
@@ -49,98 +51,122 @@ function AgentApp() {
     return () => clearInterval(interval);
   }, []);
 
-  const parseResponse = (content) => {
-    const steps = [];
-    let finalAnswer = "";
-    let chartData = null;
-    let chartTitle = "";
-    let chartType = "bar";
-
-    const lines = content.split("\n");
-    let currentStep = { thought: "", action: "", input: "", observation: "" };
-    let currentKey = null;
-
-    for (const line of lines) {
-      if (line.startsWith("Thought:")) {
-        if (currentStep.thought || currentStep.action) steps.push({ ...currentStep });
-        currentStep = { thought: line.slice(8).trim(), action: "", input: "", observation: "" };
-        currentKey = "thought";
-      } else if (line.startsWith("Action:")) {
-        currentStep.action = line.slice(7).trim();
-        currentKey = "action";
-      } else if (line.startsWith("Action Input:")) {
-        currentStep.input = line.slice(13).trim();
-        currentKey = "input";
-      } else if (line.startsWith("Observation:")) {
-        currentStep.observation = line.slice(12).trim();
-        currentKey = "observation";
-      } else if (line.startsWith("Result:")) {
-        currentStep.observation = line.slice(7).trim();
-        currentKey = "observation";
-      } else if (line.startsWith("Final Answer:")) {
-        finalAnswer = line.slice(13).trim();
-        currentKey = "final";
-      } else {
-        if (currentKey === "thought") currentStep.thought += " " + line.trim();
-        else if (currentKey === "observation") currentStep.observation += " " + line.trim();
-        else if (currentKey === "final") finalAnswer += "\\n" + line;
-      }
-    }
-    if (currentStep.thought || currentStep.action) steps.push({ ...currentStep });
-
-    // Extract chart data
-    for (const step of steps) {
-      if (step.action === "plot_chart" && step.input) {
-        try {
-          const parts = step.input.split("|");
-          if (parts.length === 3) {
-            chartType = parts[0].trim().toLowerCase();
-            chartTitle = parts[1].trim();
-            chartData = [];
-            const regex = /([^,=]+)=([\d,\.]+)/g;
-            let match;
-            while ((match = regex.exec(parts[2])) !== null) {
-              chartData.push({ 
-                name: match[1].trim(), 
-                value: parseFloat(match[2].replace(/,/g, '')) || 0 
-              });
-            }
-          }
-        } catch (e) { /* ignore parse errors */ }
-      }
-    }
-
-    return { steps, finalAnswer, chartData, chartTitle, chartType };
-  };
-
   const sendMessage = async (text) => {
     if (!text.trim() || status !== "online") return;
     const userMsg = { role: "user", content: text };
-    const currentMessages = [...messages, userMsg];
-    setMessages(currentMessages);
+    
+    // Create placeholder for assistant response
+    const assistantMsg = { 
+        role: "assistant", 
+        content: "", 
+        steps: [], 
+        agentsUsed: [], 
+        options: [],
+        isStreaming: true
+    };
+    
+    setMessages(prev => [...prev, userMsg, assistantMsg]);
     setIsLoading(true);
     if (text === query) setQuery("");
 
     try {
-      const r = await fetch(`${API_URL}/chat`, {
+      const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
-        body: JSON.stringify({ text: userMsg.content, history: currentMessages }),
+        body: JSON.stringify({ text: userMsg.content, history: messages }), // history doesn't include the current query
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      if (data.history?.length > 0) {
-        const combined = data.history.map(m => m.content).join("\n");
-        const agentsUsed = data.history[0]?.agents_used || [];
-        const options = data.history[0]?.options || [];
-        setMessages(prev => [...prev, { role: "assistant", content: combined, agentsUsed, options }]);
+      
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      
+      let currentAssistantMsg = { ...assistantMsg };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunkStr = decoder.decode(value, { stream: true });
+        const lines = chunkStr.split("\n");
+        
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === "step") {
+                currentAssistantMsg.steps.push({
+                    agent: data.agent,
+                    thought: data.thought,
+                    action: data.tool,
+                    input: data.arguments ? JSON.stringify(data.arguments) : "",
+                    observation: ""
+                });
+              } else if (data.type === "info") {
+                  currentAssistantMsg.steps.push({
+                      thought: data.message,
+                      isInfo: true
+                  });
+              } else if (data.type === "observation") {
+                if (currentAssistantMsg.steps.length > 0) {
+                    currentAssistantMsg.steps[currentAssistantMsg.steps.length - 1].observation = data.observation;
+                }
+              } else if (data.type === "result") {
+                  if (!currentAssistantMsg.steps.length || currentAssistantMsg.steps[currentAssistantMsg.steps.length - 1].observation) {
+                      currentAssistantMsg.steps.push({
+                          agent: data.agent,
+                          thought: "Finished task.",
+                          observation: data.result
+                      });
+                  } else {
+                      currentAssistantMsg.steps[currentAssistantMsg.steps.length - 1].observation = data.result;
+                  }
+              } else if (data.type === "error") {
+                  if (currentAssistantMsg.steps.length > 0) {
+                    currentAssistantMsg.steps[currentAssistantMsg.steps.length - 1].observation = "Error: " + data.error;
+                  } else {
+                    currentAssistantMsg.content = "Server Error: " + data.error;
+                    currentAssistantMsg.error = true;
+                    currentAssistantMsg.isStreaming = false;
+                  }
+              } else if (data.type === "final_answer") {
+                  currentAssistantMsg.content = data.content;
+                  currentAssistantMsg.options = data.options || [];
+                  currentAssistantMsg.agentsUsed = data.agents_used || [];
+                  currentAssistantMsg.isStreaming = false;
+              }
+              
+              setMessages(prev => {
+                  const newMsgs = [...prev];
+                  newMsgs[newMsgs.length - 1] = { ...currentAssistantMsg };
+                  return newMsgs;
+              });
+              
+            } catch (e) {
+                console.error("Error parsing SSE JSON:", e);
+            }
+          }
+        }
       }
+      
+      currentAssistantMsg.isStreaming = false;
+      setMessages(prev => {
+          const newMsgs = [...prev];
+          newMsgs[newMsgs.length - 1] = { ...currentAssistantMsg };
+          return newMsgs;
+      });
+      
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        error: true,
-        content: `Connection failed: ${err.message}. Make sure the Kaggle notebook is running.`,
-      }]);
+      setMessages(prev => {
+          const newMsgs = [...prev];
+          newMsgs[newMsgs.length - 1] = {
+              role: "assistant",
+              error: true,
+              content: `Connection failed: ${err.message}. Make sure the Kaggle notebook is running.`
+          };
+          return newMsgs;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -148,6 +174,88 @@ function AgentApp() {
 
   const statusColor = status === "online" ? "bg-emerald-500" : status === "checking" ? "bg-amber-500" : "bg-red-500";
   const statusText = status === "online" ? "Connected" : status === "checking" ? "Connecting..." : "Offline";
+
+  const renderChart = (steps) => {
+    let chartData = null;
+    let chartTitle = "";
+    let chartType = "bar";
+    
+    for (const step of steps || []) {
+      if (step.action === "plot_chart" && step.input) {
+        try {
+          const parsedArgs = JSON.parse(step.input);
+          const typeTitleData = parsedArgs.type_title_data || "";
+          const parts = typeTitleData.split("|");
+          if (parts.length === 3) {
+            chartType = parts[0].trim().toLowerCase();
+            chartTitle = parts[1].trim();
+            chartData = parts[2].split(",").map(pair => {
+              const [k, v] = pair.split("=");
+              return { 
+                name: k ? k.trim() : "", 
+                value: v ? parseFloat(v.replace(/[^0-9.-]+/g, '')) || 0 : 0 
+              };
+            });
+          }
+        } catch (e) { /* ignore parse errors */ }
+      }
+    }
+    
+    if (!chartData || chartData.length === 0) return null;
+    
+    return (
+        <div className="bg-white/[0.03] border border-white/[0.06] p-5 rounded-lg mt-3">
+          <h4 className="text-xs font-medium text-slate-300 mb-4 text-center">{chartTitle}</h4>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              {chartType === "pie" ? (
+                <PieChart>
+                  <Pie 
+                    data={chartData} 
+                    dataKey="value" 
+                    nameKey="name" 
+                    cx="50%" cy="50%" 
+                    innerRadius={60}
+                    outerRadius={90} 
+                    fill="#60a5fa" 
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
+                    itemStyle={{ color: "#fff" }}
+                  />
+                </PieChart>
+              ) : chartType === "line" ? (
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="name" stroke="#525252" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#525252" fontSize={11} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
+                  />
+                  <Line type="monotone" dataKey="value" stroke="#34d399" strokeWidth={2} dot={{ fill: "#34d399", r: 4 }} />
+                </LineChart>
+              ) : (
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="name" stroke="#525252" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#525252" fontSize={11} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
+                    cursor={{ fill: "rgba(255,255,255,0.02)" }}
+                  />
+                  <Bar dataKey="value" fill="#60a5fa" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-slate-100 flex font-sans">
@@ -176,7 +284,7 @@ function AgentApp() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-2 text-slate-400"><Terminal className="w-3.5 h-3.5" /> Compute</span>
-                <span className="text-purple-400 text-[10px] font-medium">T4 GPU</span>
+                <span className="text-purple-400 text-[10px] font-medium">T4 GPU x2</span>
               </div>
             </CardContent>
           </Card>
@@ -254,119 +362,66 @@ function AgentApp() {
                       </div>
                     )}
 
-                    {(() => {
-                      const { steps, finalAnswer, chartData, chartTitle, chartType } = parseResponse(msg.content);
-                      return (
-                        <>
-                          {/* Reasoning steps */}
-                          {steps.length > 0 && (
-                            <details className="group">
-                              <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors flex items-center gap-1.5">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                {steps.length} reasoning step{steps.length !== 1 ? "s" : ""}
-                              </summary>
-                              <div className="mt-2 space-y-2 pl-1 border-l border-white/[0.06]">
-                                {steps.map((step, idx) => (
-                                  <div key={idx} className="pl-3 text-xs font-mono text-slate-500 space-y-1">
-                                    {step.thought && <div><span className="text-purple-400">Thought:</span> {step.thought}</div>}
-                                    {step.action && <div><span className="text-blue-400">Action:</span> {step.action}({step.input})</div>}
-                                    {step.observation && <div><span className="text-emerald-400">Result:</span> {step.observation}</div>}
-                                  </div>
-                                ))}
-                              </div>
-                            </details>
-                          )}
+                    {/* Reasoning steps */}
+                    {msg.steps?.length > 0 && (
+                    <details className="group" open={msg.isStreaming}>
+                        <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 transition-colors flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {msg.steps.length} agent event{msg.steps.length !== 1 ? "s" : ""} {msg.isStreaming && <Loader2 className="w-3 h-3 animate-spin inline ml-1" />}
+                        </summary>
+                        <div className="mt-2 space-y-2 pl-1 border-l border-white/[0.06]">
+                        {msg.steps.map((step, idx) => {
+                            const meta = AGENT_META[step.agent] || {};
+                            return (
+                                <div key={idx} className="pl-3 text-xs font-mono text-slate-500 space-y-1">
+                                    {step.isInfo ? (
+                                        <div className="font-semibold text-purple-400 italic">{step.thought}</div>
+                                    ) : (
+                                        <>
+                                            <div className={`font-semibold ${meta.color || 'text-slate-400'}`}>[{step.agent?.toUpperCase()}]</div>
+                                            {step.thought && <div><span className="text-purple-400">Thought:</span> {step.thought}</div>}
+                                            {step.action && <div><span className="text-blue-400">Tool:</span> {step.action}({step.input})</div>}
+                                            {step.observation && <div><span className="text-emerald-400">Result:</span> {step.observation.length > 300 ? step.observation.substring(0, 300) + '...' : step.observation}</div>}
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        </div>
+                    </details>
+                    )}
 
-                          {/* Answer */}
-                          <div className="bg-white/[0.03] border border-white/[0.06] px-5 py-4 rounded-lg text-sm leading-relaxed prose prose-invert prose-p:my-2 prose-ul:my-2 prose-li:my-0 max-w-none">
-                            <ReactMarkdown>{(finalAnswer || msg.content).replace(/\\n/g, '\n')}</ReactMarkdown>
-                          </div>
+                    {/* Answer */}
+                    {msg.content && (
+                        <div className="bg-white/[0.03] border border-white/[0.06] px-5 py-4 rounded-lg text-sm leading-relaxed prose prose-invert prose-p:my-2 prose-ul:my-2 prose-li:my-0 max-w-none">
+                        <ReactMarkdown>{msg.content.replace(/\\n/g, '\n')}</ReactMarkdown>
+                        </div>
+                    )}
 
-                          {/* Chart */}
-                          {chartData?.length > 0 && (
-                            <div className="bg-white/[0.03] border border-white/[0.06] p-5 rounded-lg mt-3">
-                              <h4 className="text-xs font-medium text-slate-300 mb-4 text-center">{chartTitle}</h4>
-                              <div className="h-64">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  {chartType === "pie" ? (
-                                    <PieChart>
-                                      <Pie 
-                                        data={chartData} 
-                                        dataKey="value" 
-                                        nameKey="name" 
-                                        cx="50%" cy="50%" 
-                                        innerRadius={60}
-                                        outerRadius={90} 
-                                        fill="#60a5fa" 
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                      >
-                                        {chartData.map((entry, index) => (
-                                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                        ))}
-                                      </Pie>
-                                      <Tooltip 
-                                        contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
-                                        itemStyle={{ color: "#fff" }}
-                                      />
-                                    </PieChart>
-                                  ) : chartType === "line" ? (
-                                    <LineChart data={chartData}>
-                                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                                      <XAxis dataKey="name" stroke="#525252" fontSize={11} tickLine={false} />
-                                      <YAxis stroke="#525252" fontSize={11} tickLine={false} />
-                                      <Tooltip
-                                        contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
-                                      />
-                                      <Line type="monotone" dataKey="value" stroke="#34d399" strokeWidth={2} dot={{ fill: "#34d399", r: 4 }} />
-                                    </LineChart>
-                                  ) : (
-                                    <BarChart data={chartData}>
-                                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                                      <XAxis dataKey="name" stroke="#525252" fontSize={11} tickLine={false} />
-                                      <YAxis stroke="#525252" fontSize={11} tickLine={false} />
-                                      <Tooltip
-                                        contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
-                                        cursor={{ fill: "rgba(255,255,255,0.02)" }}
-                                      />
-                                      <Bar dataKey="value" fill="#60a5fa" radius={[3, 3, 0, 0]} />
-                                    </BarChart>
-                                  )}
-                                </ResponsiveContainer>
-                              </div>
-                            </div>
-                          )}
+                    {/* Chart */}
+                    {renderChart(msg.steps)}
 
-                          {/* Options */}
-                          {msg.options?.length > 0 && (
-                            <div className="mt-4 flex flex-col gap-2">
-                              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-widest">Suggested Follow-ups</p>
-                              <div className="flex flex-col gap-2">
-                                {msg.options.map((opt, idx) => (
-                                  <button
-                                    key={idx}
-                                    onClick={() => sendMessage(opt)}
-                                    className="text-left text-sm px-4 py-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 text-blue-300 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all"
-                                  >
-                                    {opt}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
+                    {/* Options */}
+                    {msg.options?.length > 0 && (
+                    <div className="mt-4 flex flex-col gap-2">
+                        <p className="text-[11px] font-medium text-slate-500 uppercase tracking-widest">Suggested Follow-ups</p>
+                        <div className="flex flex-col gap-2">
+                        {msg.options.map((opt, idx) => (
+                            <button
+                            key={idx}
+                            onClick={() => sendMessage(opt)}
+                            className="text-left text-sm px-4 py-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 text-blue-300 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all"
+                            >
+                            {opt}
+                            </button>
+                        ))}
+                        </div>
+                    </div>
+                    )}
                   </div>
                 )}
               </div>
             ))}
-
-            {isLoading && (
-              <div className="flex items-center gap-2.5 text-sm text-slate-500">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Agents working...</span>
-              </div>
-            )}
           </div>
         </div>
 
