@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Database, Activity, Terminal, Bot, Search, BarChart3, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { Send, Database, Activity, Terminal, Bot, Search, BarChart3, AlertCircle, Loader2, CheckCircle2, Globe } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Card, CardContent } from "./components/ui/card";
 import clsx from "clsx";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const API_URL = "https://lovely-husky-64.loca.lt";
 
@@ -12,7 +12,10 @@ const AGENT_META = {
   filings: { label: "FilingsAgent", icon: Search, color: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/20" },
   market:  { label: "MarketAgent",  icon: Activity, color: "text-emerald-400", bg: "bg-emerald-400/10 border-emerald-400/20" },
   chart:   { label: "ChartAgent",   icon: BarChart3, color: "text-blue-400", bg: "bg-blue-400/10 border-blue-400/20" },
+  web:     { label: "WebAgent",     icon: Globe, color: "text-purple-400", bg: "bg-purple-400/10 border-purple-400/20" },
 };
+
+const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f87171", "#c084fc", "#a78bfa"];
 
 function AgentApp() {
   const [query, setQuery] = useState("");
@@ -45,6 +48,7 @@ function AgentApp() {
     let finalAnswer = "";
     let chartData = null;
     let chartTitle = "";
+    let chartType = "bar";
 
     const lines = content.split("\n");
     let currentStep = { thought: "", action: "", input: "", observation: "" };
@@ -80,15 +84,16 @@ function AgentApp() {
 
     // Extract chart data
     for (const step of steps) {
-      if (step.action === "plot_bar_chart" && step.input) {
+      if (step.action === "plot_chart" && step.input) {
         try {
           const parts = step.input.split("|");
-          if (parts.length === 2) {
-            chartTitle = parts[0].trim();
+          if (parts.length === 3) {
+            chartType = parts[0].trim().toLowerCase();
+            chartTitle = parts[1].trim();
             chartData = [];
             const regex = /([^,=]+)=([\d,\.]+)/g;
             let match;
-            while ((match = regex.exec(parts[1])) !== null) {
+            while ((match = regex.exec(parts[2])) !== null) {
               chartData.push({ 
                 name: match[1].trim(), 
                 value: parseFloat(match[2].replace(/,/g, '')) || 0 
@@ -99,28 +104,30 @@ function AgentApp() {
       }
     }
 
-    return { steps, finalAnswer, chartData, chartTitle };
+    return { steps, finalAnswer, chartData, chartTitle, chartType };
   };
 
-  const handleSend = async () => {
-    if (!query.trim() || status !== "online") return;
-    const userMsg = { role: "user", content: query };
-    setMessages(prev => [...prev, userMsg]);
+  const sendMessage = async (text) => {
+    if (!text.trim() || status !== "online") return;
+    const userMsg = { role: "user", content: text };
+    const currentMessages = [...messages, userMsg];
+    setMessages(currentMessages);
     setIsLoading(true);
-    setQuery("");
+    if (text === query) setQuery("");
 
     try {
       const r = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
-        body: JSON.stringify({ text: userMsg.content, history: messages }),
+        body: JSON.stringify({ text: userMsg.content, history: currentMessages }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
       if (data.history?.length > 0) {
         const combined = data.history.map(m => m.content).join("\n");
         const agentsUsed = data.history[0]?.agents_used || [];
-        setMessages(prev => [...prev, { role: "assistant", content: combined, agentsUsed }]);
+        const options = data.history[0]?.options || [];
+        setMessages(prev => [...prev, { role: "assistant", content: combined, agentsUsed, options }]);
       }
     } catch (err) {
       setMessages(prev => [...prev, {
@@ -156,6 +163,10 @@ function AgentApp() {
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-2 text-slate-400"><Activity className="w-3.5 h-3.5" /> Market Feed</span>
                 <span className="text-emerald-400 text-[10px] font-medium">Live</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2 text-slate-400"><Globe className="w-3.5 h-3.5" /> Web Search</span>
+                <span className="text-blue-400 text-[10px] font-medium">Enabled</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-2 text-slate-400"><Terminal className="w-3.5 h-3.5" /> Compute</span>
@@ -195,12 +206,12 @@ function AgentApp() {
                 <div className="flex flex-wrap justify-center gap-2 mt-4">
                   {[
                     "What are the supply chain risks for Reliance?",
-                    "Get RELIANCE.NS stock price",
-                    "Show a chart of Reliance segment revenues",
+                    "Search the web for latest Tata Motors news",
+                    "Show a pie chart of Reliance segment revenues",
                   ].map((q, i) => (
                     <button
                       key={i}
-                      onClick={() => { setQuery(q); }}
+                      onClick={() => sendMessage(q)}
                       className="text-xs px-3 py-1.5 rounded border border-white/[0.06] text-slate-400 hover:text-white hover:border-white/[0.12] transition-colors"
                     >
                       {q}
@@ -222,10 +233,10 @@ function AgentApp() {
                     <span>{msg.content}</span>
                   </div>
                 ) : (
-                  <div className="w-full max-w-[90%] space-y-3">
+                  <div className="w-full max-w-[90%] space-y-3 animate-fade-in">
                     {/* Agent badges */}
                     {msg.agentsUsed?.length > 0 && (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {msg.agentsUsed.map(a => {
                           const meta = AGENT_META[a];
                           return meta ? (
@@ -238,7 +249,7 @@ function AgentApp() {
                     )}
 
                     {(() => {
-                      const { steps, finalAnswer, chartData, chartTitle } = parseResponse(msg.content);
+                      const { steps, finalAnswer, chartData, chartTitle, chartType } = parseResponse(msg.content);
                       return (
                         <>
                           {/* Reasoning steps */}
@@ -267,21 +278,72 @@ function AgentApp() {
 
                           {/* Chart */}
                           {chartData?.length > 0 && (
-                            <div className="bg-white/[0.03] border border-white/[0.06] p-5 rounded-lg">
-                              <h4 className="text-xs font-medium text-slate-400 mb-4 text-center">{chartTitle}</h4>
-                              <div className="h-56">
+                            <div className="bg-white/[0.03] border border-white/[0.06] p-5 rounded-lg mt-3">
+                              <h4 className="text-xs font-medium text-slate-300 mb-4 text-center">{chartTitle}</h4>
+                              <div className="h-64">
                                 <ResponsiveContainer width="100%" height="100%">
-                                  <BarChart data={chartData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                                    <XAxis dataKey="name" stroke="#525252" fontSize={11} tickLine={false} />
-                                    <YAxis stroke="#525252" fontSize={11} tickLine={false} />
-                                    <Tooltip
-                                      contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
-                                      cursor={{ fill: "rgba(255,255,255,0.02)" }}
-                                    />
-                                    <Bar dataKey="value" fill="#60a5fa" radius={[3, 3, 0, 0]} />
-                                  </BarChart>
+                                  {chartType === "pie" ? (
+                                    <PieChart>
+                                      <Pie 
+                                        data={chartData} 
+                                        dataKey="value" 
+                                        nameKey="name" 
+                                        cx="50%" cy="50%" 
+                                        innerRadius={60}
+                                        outerRadius={90} 
+                                        fill="#60a5fa" 
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                      >
+                                        {chartData.map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                        ))}
+                                      </Pie>
+                                      <Tooltip 
+                                        contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
+                                        itemStyle={{ color: "#fff" }}
+                                      />
+                                    </PieChart>
+                                  ) : chartType === "line" ? (
+                                    <LineChart data={chartData}>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                                      <XAxis dataKey="name" stroke="#525252" fontSize={11} tickLine={false} />
+                                      <YAxis stroke="#525252" fontSize={11} tickLine={false} />
+                                      <Tooltip
+                                        contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
+                                      />
+                                      <Line type="monotone" dataKey="value" stroke="#34d399" strokeWidth={2} dot={{ fill: "#34d399", r: 4 }} />
+                                    </LineChart>
+                                  ) : (
+                                    <BarChart data={chartData}>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                                      <XAxis dataKey="name" stroke="#525252" fontSize={11} tickLine={false} />
+                                      <YAxis stroke="#525252" fontSize={11} tickLine={false} />
+                                      <Tooltip
+                                        contentStyle={{ backgroundColor: "#141420", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", fontSize: "12px" }}
+                                        cursor={{ fill: "rgba(255,255,255,0.02)" }}
+                                      />
+                                      <Bar dataKey="value" fill="#60a5fa" radius={[3, 3, 0, 0]} />
+                                    </BarChart>
+                                  )}
                                 </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Options */}
+                          {msg.options?.length > 0 && (
+                            <div className="mt-4 flex flex-col gap-2">
+                              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-widest">Suggested Follow-ups</p>
+                              <div className="flex flex-col gap-2">
+                                {msg.options.map((opt, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => sendMessage(opt)}
+                                    className="text-left text-sm px-4 py-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 text-blue-300 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all"
+                                  >
+                                    {opt}
+                                  </button>
+                                ))}
                               </div>
                             </div>
                           )}
@@ -307,13 +369,13 @@ function AgentApp() {
             <Input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleSend()}
+              onKeyDown={e => e.key === "Enter" && sendMessage(query)}
               placeholder={status === "online" ? "Ask about Indian financial markets..." : "Waiting for backend..."}
               disabled={status !== "online" || isLoading}
               className="flex-1 bg-white/[0.03] border-white/[0.06] h-11 text-sm placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-blue-500/30"
             />
             <Button
-              onClick={handleSend}
+              onClick={() => sendMessage(query)}
               disabled={status !== "online" || isLoading || !query.trim()}
               className="h-11 w-11 p-0 bg-white/[0.05] border border-white/[0.06] hover:bg-white/[0.08]"
             >

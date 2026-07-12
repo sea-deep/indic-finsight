@@ -7,17 +7,17 @@ intro_md = """# Indic-FinSight: Multi-Agent Financial Analyst
 **Kaggle Submission — Gemma 2B on T4 GPU**
 
 A multi-agent system that breaks complex financial queries into sub-tasks,
-delegates to specialized agents (Filings, Market, Chart), and synthesizes
-a unified answer.
+delegates to specialized agents (Filings, Market, Chart, Web), and synthesizes
+a unified answer with follow-up options.
 
 **Architecture:**
 ```
-User Query → Intent Router → [FilingsAgent | MarketAgent | ChartAgent] → Orchestrator → Response
+User Query → Intent Router → [Filings | Market | Chart | Web] → Orchestrator → Response
 ```
 """
 
 # Cell 2: Installs
-installs = """!pip install -q -U chromadb fastembed yfinance transformers accelerate bitsandbytes fastapi uvicorn pydantic nest-asyncio
+installs = """!pip install -q -U chromadb fastembed yfinance transformers accelerate bitsandbytes fastapi uvicorn pydantic nest-asyncio duckduckgo-search
 !npm install -g localtunnel"""
 
 # Cell 3: Imports
@@ -25,6 +25,7 @@ imports = """import torch
 import chromadb
 import yfinance as yf
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from duckduckgo_search import DDGS
 import re
 import json
 import warnings
@@ -119,13 +120,23 @@ def get_live_stock_price(ticker: str) -> str:
     except Exception as e:
         return f"Error fetching {ticker}: {e}"
 
-def plot_bar_chart(title_and_data: str) -> str:
-    return f"[CHART:{title_and_data}]"
+def search_web(query: str) -> str:
+    try:
+        results = DDGS().text(query, max_results=3)
+        if not results:
+            return "No web results found."
+        return " ".join([f"[{r['title']}] {r['body']}" for r in results])
+    except Exception as e:
+        return f"Web search error: {e}"
+
+def plot_chart(type_title_data: str) -> str:
+    return f"[CHART:{type_title_data}]"
 
 TOOLS = {
     "search_filings": search_filings,
     "get_live_stock_price": get_live_stock_price,
-    "plot_bar_chart": plot_bar_chart,
+    "search_web": search_web,
+    "plot_chart": plot_chart,
 }"""
 
 # Cell 7: Multi-Agent System
@@ -137,7 +148,8 @@ INTENT_KEYWORDS = {
                 "supply chain", "segment", "quarter", "annual", "fy", "q1", "q2", "q3", "q4"],
     "market":  ["price", "stock", "ticker", "nse", "bse", "live", "current", "share price",
                 "market cap", "trading"],
-    "chart":   ["chart", "graph", "plot", "visualize", "bar chart", "trend", "compare"],
+    "chart":   ["chart", "graph", "plot", "visualize", "bar chart", "trend", "compare", "pie", "line"],
+    "web":     ["news", "recent", "search", "update", "latest", "internet", "web"],
 }
 
 def classify_intent(query: str) -> list:
@@ -147,7 +159,7 @@ def classify_intent(query: str) -> list:
         if any(kw in query_lower for kw in keywords):
             intents.append(intent)
     if not intents:
-        intents = ["filings"]
+        intents = ["web"]  # Default to web search if unknown
     return intents
 
 AGENT_PROMPTS = {
@@ -177,28 +189,43 @@ After receiving an Observation, provide:
 Thought: [brief analysis]
 Result: [the price data]''',
 
+    "web": '''You are WebAgent, a live internet search specialist.
+You have ONE tool: search_web(query)
+Your job: search the internet for the most recent news or financial information.
+
+Format your response EXACTLY as:
+Thought: [identify what to search for]
+Action: search_web
+Action Input: [your search query]
+
+After receiving an Observation, provide:
+Thought: [brief analysis of web results]
+Result: [summary of recent news]''',
+
     "chart": '''You are ChartAgent, a data visualization specialist.
-You have ONE tool: plot_bar_chart(title_and_data)
-The tool input format is: Chart Title | label1=value1, label2=value2, label3=value3
+You have ONE tool: plot_chart(type_title_data)
+The tool input format MUST be: TYPE | Chart Title | label1=value1, label2=value2
+TYPE must be one of: bar, line, pie
 
 Your job: extract numeric data from the conversation context and create a chart.
 
 Format your response EXACTLY as:
-Thought: [identify what data to chart]
-Action: plot_bar_chart
-Action Input: [Title | key1=val1, key2=val2]
+Thought: [identify what data to chart and the type]
+Action: plot_chart
+Action Input: [bar | Title | key1=val1, key2=val2]
 
 After receiving an Observation, provide:
 Thought: [confirm chart created]
 Result: [description of the chart]''',
 }
 
-def run_sub_agent(agent_type, user_query, context="", max_steps=4):
+def run_sub_agent(agent_type, user_query, context="", max_steps=6):
     agent_prompt = AGENT_PROMPTS[agent_type]
     tool_map = {
         "filings": {"search_filings": search_filings},
         "market": {"get_live_stock_price": get_live_stock_price},
-        "chart": {"plot_bar_chart": plot_bar_chart},
+        "web": {"search_web": search_web},
+        "chart": {"plot_chart": plot_chart},
     }
     tools = tool_map[agent_type]
     
@@ -273,7 +300,12 @@ def run_orchestrator(user_query, previous_history=None):
         print(f"[{intent.upper()}] Result: {result['result']}")
     
     # Step 3: Synthesize final answer
-    synthesis_prompt = f'''You are a financial analyst. Combine these agent reports into one clear, professional response.
+    synthesis_prompt = f'''You are a highly intelligent financial orchestrator.
+Synthesize the reports below into a comprehensive, professional response.
+
+If data is missing from the reports, suggest 2 or 3 logical follow-up actions the user could take to find it.
+You MUST output your suggested follow-ups at the very end of your response using exactly this JSON format:
+[OPTIONS: "Option 1 text", "Option 2 text"]
 
 User asked: {user_query}
 
@@ -282,14 +314,24 @@ Agent Reports:
     for agent_type, result in agent_results.items():
         synthesis_prompt += f"- {agent_type.title()} Agent: {result}\\n"
     
-    synthesis_prompt += "\\nProvide a comprehensive answer. Be specific with numbers. Do not say you lack data if agents provided it."
-    
     chat = [{"role": "user", "content": synthesis_prompt}]
     prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     output = gemma(prompt)[0]['generated_text']
-    final_answer = output[len(prompt):].strip()
+    final_answer_raw = output[len(prompt):].strip()
     
+    # Extract OPTIONS if present
+    options = []
+    options_match = re.search(r'\\[OPTIONS:\\s*(.*?)\\]', final_answer_raw, re.IGNORECASE)
+    if options_match:
+        options_text = options_match.group(1)
+        # simplistic extraction of strings in quotes
+        options = re.findall(r'"([^"]+)"', options_text)
+        final_answer = re.sub(r'\\[OPTIONS:.*?\\]', '', final_answer_raw, flags=re.IGNORECASE).strip()
+    else:
+        final_answer = final_answer_raw
+        
     print(f"\\nFINAL ANSWER: {final_answer}")
+    print(f"OPTIONS: {options}")
     
     # Build response for frontend
     trace_text = ""
@@ -302,14 +344,15 @@ Agent Reports:
     combined = trace_text + f"Final Answer: {final_answer}"
     
     return [
-        {"role": "assistant", "content": combined, "agents_used": intents}
+        {"role": "assistant", "content": combined, "agents_used": intents, "options": options}
     ]"""
 
 # Cell 8: Test execution
 execution_code = """# 5. Test Run
 result = run_orchestrator("What are the supply chain risks for Reliance Industries, and what is their live stock price (ticker: RELIANCE.NS)?")
 for msg in result:
-    print(msg["content"])"""
+    print(msg["content"])
+    print(msg.get("options", []))"""
 
 # Cell 9: API Server
 api_code = """# 6. FastAPI Server + Localtunnel
@@ -336,7 +379,7 @@ class Query(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": "gemma-2-2b-it", "agents": ["filings", "market", "chart"]}
+    return {"status": "ok", "model": "gemma-2-2b-it", "agents": ["filings", "market", "chart", "web"]}
 
 @app.post("/chat")
 def chat(query: Query):
@@ -370,7 +413,6 @@ async def keep_alive():
         await asyncio.sleep(3600)
 
 await keep_alive()"""
-
 
 nb['cells'] = [
     nbf.v4.new_markdown_cell(intro_md),
